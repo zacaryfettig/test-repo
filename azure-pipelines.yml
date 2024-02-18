@@ -1,0 +1,126 @@
+variables:
+- name: AzureSubscription
+  value: subscription1(cb746d33-61f2-4005-a6e1-323245542be4)
+  
+- name: themesDirectoryExists
+  value: false
+
+- name: pluginsDirectoryExists
+  value: false
+
+trigger:
+- main
+
+pool: linux-container-instances
+#  vmImage: ubuntu-latest
+jobs:
+- job: checkout
+
+  steps:
+  - checkout: self
+
+- job: azurecli
+  dependsOn: checkout
+  condition: succeeded('checkout')
+  steps:
+    - bash: |
+        if [ -d "$(System.DefaultWorkingDirectory)/wordpress-themes-&-plugins/themes" ]; then 
+
+          echo '##vso[task.setvariable variable=themesDirectoryExists]true'
+        fi
+
+    - bash: |
+        if [ -d "$(System.DefaultWorkingDirectory)/wordpress-themes-&-plugins/plugins" ]; then 
+          echo '##vso[task.setvariable variable=pluginsDirectoryExists]true'
+        fi
+          #task.setvariable themesDirectoryExists=true
+    - task: AzureKeyVault@2
+      inputs:
+        azureSubscription: 'subscription1(cb746d33-61f2-4005-a6e1-323245542be4)'
+        KeyVaultName: 'keyVault-fz378z'
+        SecretsFilter: '*'
+        RunAsPreJob: true
+
+#Themes
+    - task: AzureCLI@2
+      condition: eq(variables.themesDirectoryExists, 'true')
+      inputs:
+        azureSubscription: $(AzureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: 'az storage file upload-batch --destination https://$(storageAccountName).file.core.windows.net/wordpress --destination-path /wordpress/wp-content/themes --source $(System.DefaultWorkingDirectory)/wordpress-themes-&-plugins --account-name $(storageAccountName) --account-key $(storageAccessKey)'
+
+#Plugins
+    - task: AzureCLI@2
+      condition: eq(variables.pluginsDirectoryExists, 'true')
+      inputs:
+        azureSubscription: $(AzureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: 'az storage file upload-batch --destination https://$(storageAccountName).file.core.windows.net/wordpress --destination-path /wordpress/wp-content/plugins --source $(System.DefaultWorkingDirectory)/wordpress-themes-&-plugins --account-name $(storageAccountName) --account-key $(storageAccessKey)'
+
+
+# #Following code replaces values in the Wordpress Config File with Keyvault secrets created from Terraform Template
+# #copy sample config to wp-config.php for editing and final release
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'cp $(System.DefaultWorkingDirectory)/wp-config-sample.php $(System.DefaultWorkingDirectory)/wp-config.php'
+
+# #replace dbname in config file
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'sed -i s/dbname/$(dbname)/g wp-config.php $(System.DefaultWorkingDirectory)/wp-config.php'
+        
+#         #replace dbuser in config file
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'sed -i s/dbuser/$(dbuser)/g wp-config.php $(System.DefaultWorkingDirectory)/wp-config.php'
+
+#         #replace dbpassword in config file
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'sed -i s/dbpassword/$(dbpassword)/g $(System.DefaultWorkingDirectory)/wp-config.php'
+        
+#         #replace dbhost in config file
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'sed -i s/dbhost/$(dbhost)/g $(System.DefaultWorkingDirectory)/wp-config.php'
+
+#         #replace redishost in config file
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'sed -i s/redishost/$(redishost)/g $(System.DefaultWorkingDirectory)/wp-config.php'
+
+#         #replace redispassword in config file
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'sed -i s/redispassword/$(redispassword)/g $(System.DefaultWorkingDirectory)/wp-config.php'
+
+#         #Config File upload to Wordpress Files
+#     - task: AzureCLI@2
+#       inputs:
+#         azureSubscription: $(AzureSubscription)
+#         scriptType: 'bash'
+#         scriptLocation: 'inlineScript'
+#         inlineScript: 'az storage file upload --source $(System.DefaultWorkingDirectory)/wp-config.php --account-name $(storageAccountName) --account-key $(storageAccessKey) --share-name wordpress'
